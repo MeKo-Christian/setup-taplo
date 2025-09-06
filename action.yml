@@ -34,9 +34,23 @@ runs:
           echo "ℹ️  $1"
         }
 
-        # Function for success messages
-        success() {
-          echo "✅ $1"
+        # Function to build the correct download filename based on version
+        get_download_filename() {
+          local version="$1"
+          local os="$2"
+          local arch="$3"
+
+          # Extract major and minor version numbers
+          local major=$(echo "$version" | cut -d. -f1)
+          local minor=$(echo "$version" | cut -d. -f2)
+
+          # For versions before 0.10.0, use "full" in filename
+          # For 0.10.0 and later, don't use "full"
+          if [ "$major" -eq 0 ] && [ "$minor" -lt 10 ]; then
+            echo "taplo-full-${os}-${arch}.gz"
+          else
+            echo "taplo-${os}-${arch}.gz"
+          fi
         }
 
         # Validate version format
@@ -65,7 +79,8 @@ runs:
             info "Installing Taplo ${{ inputs.version }} for Linux ($ARCH)..."
             mkdir -p "$HOME/.local/bin" || error "Failed to create directory: $HOME/.local/bin"
 
-            if ! curl -fsSL "https://github.com/tamasfe/taplo/releases/download/${{ inputs.version }}/taplo-full-${RUNNER_OS}-${ARCH}.gz" \
+            DOWNLOAD_FILE=$(get_download_filename "${{ inputs.version }}" "$RUNNER_OS" "$ARCH")
+            if ! curl -fsSL "https://github.com/tamasfe/taplo/releases/download/${{ inputs.version }}/$DOWNLOAD_FILE" \
               | gzip -d - > "$HOME/.local/bin/taplo"; then
               error "Failed to download Taplo ${{ inputs.version }}. Please check if the version exists at: https://github.com/tamasfe/taplo/releases/tag/${{ inputs.version }}"
             fi
@@ -100,7 +115,8 @@ runs:
             fi
 
             info "Installing Taplo ${{ inputs.version }} for Windows ($ARCH)..."
-            if ! curl -Ls "https://github.com/tamasfe/taplo/releases/download/${{ inputs.version }}/taplo-full-${RUNNER_OS}-${ARCH}.gz" | \
+            DOWNLOAD_FILE=$(get_download_filename "${{ inputs.version }}" "$RUNNER_OS" "$ARCH")
+            if ! curl -Ls "https://github.com/tamasfe/taplo/releases/download/${{ inputs.version }}/$DOWNLOAD_FILE" | \
             gzip -d > taplo.exe; then
               error "Failed to download Taplo ${{ inputs.version }}. Please check if the version exists at: https://github.com/tamasfe/taplo/releases/tag/${{ inputs.version }}"
             fi
@@ -130,7 +146,8 @@ runs:
             fi
 
             info "Installing Taplo ${{ inputs.version }} for macOS ($ARCH)..."
-            if ! curl -Ls "https://github.com/tamasfe/taplo/releases/download/${{ inputs.version }}/taplo-full-${RUNNER_OS}-${ARCH}.gz" | \
+            DOWNLOAD_FILE=$(get_download_filename "${{ inputs.version }}" "$RUNNER_OS" "$ARCH")
+            if ! curl -Ls "https://github.com/tamasfe/taplo/releases/download/${{ inputs.version }}/$DOWNLOAD_FILE" | \
             gzip -d > taplo; then
               error "Failed to download Taplo ${{ inputs.version }}. Please check if the version exists at: https://github.com/tamasfe/taplo/releases/tag/${{ inputs.version }}"
             fi
