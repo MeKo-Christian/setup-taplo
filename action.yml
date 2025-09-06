@@ -4,47 +4,147 @@ inputs:
   version:
     description: Version of Taplo to install
     required: false
-    default: "0.8.1"
+    default: "0.10.0"
 runs:
   using: "composite"
   steps:
     - name: Install Taplo
       shell: bash
       run: |
-        SUDO="sudo"
-        LOCATION="/usr/local/bin/taplo"
+        set -euo pipefail
+
+        # Function to get installed taplo version
+        get_installed_version() {
+          local cmd="$1"
+          if command -v "$cmd" >/dev/null 2>&1; then
+            "$cmd" --version 2>/dev/null | grep -o '[0-9]\+\.[0-9]\+\.[0-9]\+' || echo ""
+          else
+            echo ""
+          fi
+        }
+
+        # Function for error messages
+        error() {
+          echo "❌ Error: $1" >&2
+          exit 1
+        }
+
+        # Function for info messages
+        info() {
+          echo "ℹ️  $1"
+        }
+
+        # Function for success messages
+        success() {
+          echo "✅ $1"
+        }
+
+        # Validate version format
+        if [[ ! "${{ inputs.version }}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          error "Invalid version format: ${{ inputs.version }}. Expected format: x.y.z (e.g., 0.10.0)"
+        fi
 
         case "${{ runner.os }}" in
           "Linux")
             RUNNER_OS="linux"
+            ARCH="$(uname -m)"
+            case "$ARCH" in
+              x86_64) ARCH="x86_64" ;;
+              aarch64|arm64) ARCH="aarch64" ;;
+              *) error "Unsupported architecture: $ARCH. Supported architectures: x86_64, aarch64. Please check the Taplo releases for your architecture." ;;
+            esac
+
+            # Check if already installed
+            INSTALLED_VERSION=$(get_installed_version "$HOME/.local/bin/taplo")
+            if [ "$INSTALLED_VERSION" = "${{ inputs.version }}" ]; then
+              success "Taplo ${{ inputs.version }} already installed at $HOME/.local/bin/taplo"
+              echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+              exit 0
+            fi
+
+            info "Installing Taplo ${{ inputs.version }} for Linux ($ARCH)..."
+            mkdir -p "$HOME/.local/bin" || error "Failed to create directory: $HOME/.local/bin"
+
+            if ! curl -fsSL "https://github.com/tamasfe/taplo/releases/download/${{ inputs.version }}/taplo-full-${RUNNER_OS}-${ARCH}.gz" \
+              | gzip -d - > "$HOME/.local/bin/taplo"; then
+              error "Failed to download Taplo ${{ inputs.version }}. Please check if the version exists at: https://github.com/tamasfe/taplo/releases/tag/${{ inputs.version }}"
+            fi
+
+            chmod +x "$HOME/.local/bin/taplo" || error "Failed to make taplo executable"
+            echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+            # Verify installation
+            if ! "$HOME/.local/bin/taplo" --version >/dev/null 2>&1; then
+              error "Installation verification failed. Taplo may not be working correctly."
+            fi
+            success "Taplo ${{ inputs.version }} installed successfully"
             ;;
           "Windows")
             RUNNER_OS="windows"
-            SUDO=""
-
             DIR="C:\\Program Files\\taplo\\bin\\"
-            mkdir -p "$DIR"
+            mkdir -p "$DIR" || error "Failed to create directory: $DIR"
             echo "$DIR" >> $GITHUB_PATH
-
             LOCATION="${DIR}taplo.exe"
+            ARCH="$(uname -m)"
+            case "$ARCH" in
+              x86_64) ARCH="x86_64" ;;
+              aarch64|arm64) ARCH="aarch64" ;;
+              *) error "Unsupported architecture: $ARCH. Supported architectures: x86_64, aarch64. Please check the Taplo releases for your architecture." ;;
+            esac
+
+            # Check if already installed
+            INSTALLED_VERSION=$(get_installed_version "$LOCATION")
+            if [ "$INSTALLED_VERSION" = "${{ inputs.version }}" ]; then
+              success "Taplo ${{ inputs.version }} already installed at $LOCATION"
+              exit 0
+            fi
+
+            info "Installing Taplo ${{ inputs.version }} for Windows ($ARCH)..."
+            if ! curl -Ls "https://github.com/tamasfe/taplo/releases/download/${{ inputs.version }}/taplo-full-${RUNNER_OS}-${ARCH}.gz" | \
+            gzip -d > taplo.exe; then
+              error "Failed to download Taplo ${{ inputs.version }}. Please check if the version exists at: https://github.com/tamasfe/taplo/releases/tag/${{ inputs.version }}"
+            fi
+
+            mv taplo.exe "${LOCATION}" || error "Failed to move taplo.exe to $LOCATION"
+
+            # Verify installation
+            if ! "$LOCATION" --version >/dev/null 2>&1; then
+              error "Installation verification failed. Taplo may not be working correctly."
+            fi
+            success "Taplo ${{ inputs.version }} installed successfully"
             ;;
           "macOS")
             RUNNER_OS="darwin"
-            ;;
-        esac
-        case "${{ runner.arch }}" in
-          "X86" | "X64")
-            RUNNER_ARCH="x86_64"
-            ;;
-          "ARM64")
-            RUNNER_ARCH="aarch64"
+            ARCH="$(uname -m)"
+            case "$ARCH" in
+              x86_64) ARCH="x86_64" ;;
+              aarch64|arm64) ARCH="aarch64" ;;
+              *) error "Unsupported architecture: $ARCH. Supported architectures: x86_64, aarch64. Please check the Taplo releases for your architecture." ;;
+            esac
+
+            # Check if already installed
+            INSTALLED_VERSION=$(get_installed_version "/usr/local/bin/taplo")
+            if [ "$INSTALLED_VERSION" = "${{ inputs.version }}" ]; then
+              success "Taplo ${{ inputs.version }} already installed at /usr/local/bin/taplo"
+              exit 0
+            fi
+
+            info "Installing Taplo ${{ inputs.version }} for macOS ($ARCH)..."
+            if ! curl -Ls "https://github.com/tamasfe/taplo/releases/download/${{ inputs.version }}/taplo-full-${RUNNER_OS}-${ARCH}.gz" | \
+            gzip -d > taplo; then
+              error "Failed to download Taplo ${{ inputs.version }}. Please check if the version exists at: https://github.com/tamasfe/taplo/releases/tag/${{ inputs.version }}"
+            fi
+
+            chmod +x taplo || error "Failed to make taplo executable"
+            sudo mv taplo "/usr/local/bin/taplo" || error "Failed to move taplo to /usr/local/bin/taplo. You may need to run this action with sudo permissions."
+
+            # Verify installation
+            if ! "/usr/local/bin/taplo" --version >/dev/null 2>&1; then
+              error "Installation verification failed. Taplo may not be working correctly."
+            fi
+            success "Taplo ${{ inputs.version }} installed successfully"
             ;;
           *)
-            echo "Unsupported architecture"
-            exit 1
+            error "Unsupported operating system: ${{ runner.os }}. Supported OS: Linux, Windows, macOS."
             ;;
         esac
-        curl -Ls "https://github.com/tamasfe/taplo/releases/download/${{ inputs.version }}/taplo-full-${RUNNER_OS}-${RUNNER_ARCH}.gz" | \
-        gzip -d > taplo && \
-        chmod +x taplo && \
-        ${SUDO} mv taplo "${LOCATION}"

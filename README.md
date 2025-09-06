@@ -7,7 +7,7 @@ Setup [Taplo](https://taplo.tamasfe.dev/) in GitHub Actions.
 ```yaml
 - uses: uncenter/setup-taplo@v1
   with:
-    version: "0.8.1"
+    version: "0.10.0"
 ```
 
 ## Examples
@@ -26,7 +26,7 @@ jobs:
 
       - uses: uncenter/setup-taplo@v1
         with:
-          version: "0.8.1"
+          version: "0.10.0"
 
       - run: taplo fmt foo.toml --check
 ```
